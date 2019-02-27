@@ -59,6 +59,7 @@ void loop() {
     esp8266Module.read();
   }
   //String espResponse = esp8266Module.readString();
+  espDataIsAvailable = true;
   /**
    * Read data retruned from GPS module and configure necessary parameters
    */
@@ -78,7 +79,7 @@ void loop() {
     /**
      * Compare data to determine if access to gun should be grated
      */
-     const String testData = "{\"geo_radius\": 0, \"emergency_allow\": 3, \"emergency_duration\": 5, \"emergency_duration_unit\": \"minute\",\"lat\": 0, \"long\":0}";
+     const String testData = "{\"geo_radius\": 0, \"emergency_allow\": 3, \"emergency_duration\": 5, \"emergency_duration_unit\": \"second\",\"lat\": 0, \"long\":0}";
      //GPS validation
      JsonObject& espResponseData = jsonBuffer.parseObject(testData);
      long geo_radius = espResponseData["geo_radius"];
@@ -122,23 +123,30 @@ void loop() {
           emergencyAllowIsActive = true;
         }
      } else {
-        if (emergencyAllowsUsed < emergency_allow) {//user can initiate an emergency gun use
-          buttonState = digitalRead(emergencyButton);
-          if (buttonState == HIGH) {
-            lastEmergencyAllowInitiation = millis();//initalize to start counting
-            emergencyAllowsUsed++;
-            emergencyAllowIsActive = true;
-            emergencyAllowPass = true;
+        if (espDataIsAvailable) {//ensure server sent a message or else close up gun
+          if (emergencyAllowsUsed < emergency_allow) {//user can initiate an emergency gun use
+            buttonState = digitalRead(emergencyButton);
+            if (buttonState == HIGH) {
+              lastEmergencyAllowInitiation = millis();//initalize to start counting
+              emergencyAllowsUsed++;
+              emergencyAllowIsActive = true;
+              emergencyAllowPass = true;
+            } else {
+              emergencyAllowPass = false;
+              emergencyAllowIsActive = false;
+              lastEmergencyAllowInitiation = 0;
+            }
           } else {
             emergencyAllowPass = false;
-            emergencyAllowIsActive = false;
-            lastEmergencyAllowInitiation = 0;
+             emergencyAllowIsActive = false;
+             lastEmergencyAllowInitiation = 0;
           }
         } else {
           emergencyAllowPass = false;
-           emergencyAllowIsActive = false;
-           lastEmergencyAllowInitiation = 0;
+             emergencyAllowIsActive = false;
+             lastEmergencyAllowInitiation = 0;
         }
+        
      }
 
      //compare all and on!
