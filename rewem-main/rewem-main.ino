@@ -10,7 +10,7 @@ Servo triggerLock;
 const int emergencyButton = 4;
 const int servoPin = 5;
 const int openPosition = 90;
-const int closePosition = 160;
+const int closePosition = 0;
 //Define Objects
 TinyGPSPlus gps;
 /**
@@ -79,7 +79,7 @@ void loop() {
     /**
      * Compare data to determine if access to gun should be grated
      */
-     const String testData = "{\"geo_radius\": 0, \"emergency_allow\": 3, \"emergency_duration\": 5, \"emergency_duration_unit\": \"second\",\"lat\": 0, \"long\":0}";
+     const String testData = "{\"geo_radius\": 0, \"emergency_allow\": 10, \"emergency_duration\": 5, \"emergency_duration_unit\": \"second\",\"lat\": 0, \"long\":0}";
      //GPS validation
      JsonObject& espResponseData = jsonBuffer.parseObject(testData);
      long geo_radius = espResponseData["geo_radius"];
@@ -152,8 +152,10 @@ void loop() {
      //compare all and on!
      if (gpsPass && emergencyAllowPass && rfidPass) {
        digitalWrite(LED_BUILTIN, HIGH); 
+       triggerLock.write(openPosition); 
      } else {
       digitalWrite(LED_BUILTIN, LOW); 
+      triggerLock.write(closePosition); 
      }
 }
 
