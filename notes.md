@@ -35,3 +35,10 @@ Signal - Orange
 For button
 - connect button from +5v pin to Digital pin (4 for this project) of button
 - connect 10K Ohms resistor from digital pin to ground
+----------------------------------------------------------------------------
+pn532 nfc
+- board is set in I2C mode.
+- SDA to A4
+- SCL to A5
+- RST D7
+- IRQ D6
