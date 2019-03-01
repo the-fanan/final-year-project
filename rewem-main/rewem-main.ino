@@ -1,12 +1,10 @@
+#include <ArduinoJson.h>
 #include <Servo.h>
 #include <TinyGPS++.h>
-#include <ArduinoJson.h>
 #include <SoftwareSerial.h>
 #include <Wire.h>
 #include <SPI.h>
 #include <Adafruit_PN532.h>
-
-
 //Define serials, pins and objects
 SoftwareSerial esp8266Module(3, 2); // RX, TX
 SoftwareSerial gpsModule(9, 8);
@@ -16,71 +14,40 @@ const int emergencyButton = 4;
 const int servoPin = 5;
 const int openPosition = 90;
 const int closePosition = 0;
-#define PN532_IRQ   (6)
-#define PN532_RESET (7)
-Adafruit_PN532 nfc(PN532_IRQ, PN532_RESET);
-/**
- * Example
- *  String input = "{\"sensor\":\"gps\",\"time\":1351824120,\"data\":[48.756080,2.302038]}";
- *  JsonObject& root = jsonBuffer.parseObject(input);
- *  String sensor = root["sensor"];
- *  double latitude    = root["data"][0];
- *  double longitude    = root["data"][1];
- */
+//#define PN532_IRQ   (6)
+//#define PN532_RESET (7)
+Adafruit_PN532 nfc(6, 7);
  //Globals defined here
  double userLatitude;
  double userLongitude;
  bool gpsDataIsValid = false;
  bool espDataIsAvailable = false;
- bool openTrigger = false;
  bool gpsPass = false;
  bool rfidPass = false;
  bool emergencyAllowPass = false;
  bool emergencyAllowIsActive = false;
  int emergencyAllowsUsed = 0;
  unsigned long lastEmergencyAllowInitiation = 0;
- int buttonState = 0; 
- /**
-  * Test data 
-  */
-  
+ int buttonState; 
 void setup() {
-  uint32_t espBaud = 115200;
-  uint32_t gpsBaud = 9600;
-  Serial.begin(espBaud);
-  esp8266Module.begin(espBaud);
-  gpsModule.begin(gpsBaud);
+  Serial.begin(115200);
+  esp8266Module.begin(115200);
+  gpsModule.begin(9600);
   pinMode(emergencyButton, INPUT);
   triggerLock.attach(servoPin);
   pinMode(LED_BUILTIN, OUTPUT);
-
   //rfid
   nfc.begin();
-
-  uint32_t versiondata = nfc.getFirmwareVersion();
-  if (! versiondata) {
-    Serial.print("Didn't find PN53x board");
-    while (1); // halt
-  }
-  
-  // Got ok data, print it out!
-  Serial.print("Found chip PN5"); Serial.println((versiondata>>24) & 0xFF, HEX); 
-  Serial.print("Firmware ver. "); Serial.print((versiondata>>16) & 0xFF, DEC); 
-  Serial.print('.'); Serial.println((versiondata>>8) & 0xFF, DEC);
-  
   // Set the max number of retry attempts to read from a card
   // This prevents us from waiting forever for a card, which is
   // the default behaviour of the PN532.
-  nfc.setPassiveActivationRetries(0xFF);
-  
+  nfc.setPassiveActivationRetries(0x9);
   // configure board to read RFID tags
   nfc.SAMConfig();
-  
   Serial.println("Waiting for an ISO14443A card");
 }
-
 void loop() {
-  DynamicJsonBuffer jsonBuffer;
+  DynamicJsonDocument doc(300);
   /**
    * Read data retruned from WiFi module and configure necessary parameter
    */
@@ -89,6 +56,14 @@ void loop() {
   }
   //String espResponse = esp8266Module.readString();
   espDataIsAvailable = true;
+  char testData[] = "{\"gr\":0,\"ea\":10,\"ed\":30,\"edu\":\"second\",\"lt\":0,\"lg\":0,\"r\":1341752731}";
+//getting error here because of data size
+//  Serial.println(testData.length());
+  DeserializationError error = deserializeJson(doc, testData);
+  if (error) {
+    Serial.println("there was error");
+  }
+  JsonObject espResponseData = doc.as<JsonObject>();
   /**
    * Read data retruned from GPS module and configure necessary parameters
    */
@@ -109,20 +84,19 @@ void loop() {
     uint8_t uid[] = { 0, 0, 0, 0, 0, 0, 0 };  // Buffer to store the returned UID
     uint8_t uidLength;        // Length of the UID (4 or 7 bytes depending on ISO14443A card type)
     cardReadSuccessful = nfc.readPassiveTargetID(PN532_MIFARE_ISO14443A, &uid[0], &uidLength);
+    delay(1000);
     /**
      * Compare data to determine if access to gun should be grated
      */
-     const String testData = "{\"geo_radius\": 0, \"emergency_allow\": 10, \"emergency_duration\": 5, \"emergency_duration_unit\": \"second\",\"lat\": 0, \"long\":0, \"rfid\":1341752731}";
      //GPS validation
-     JsonObject& espResponseData = jsonBuffer.parseObject(testData);
-     long geo_radius = espResponseData["geo_radius"];
+     long geo_radius = espResponseData["gr"];
      if (geo_radius == 0) { //perform GPS analysis disregarding location
       gpsPass = true;
      } else { //perform analysis including location
         if (gpsDataIsValid) {//perform check
           if (espDataIsAvailable) {//ensure server sent a message or else close up gun
-            double serverLat = espResponseData["lat"];
-            double serverLong = espResponseData["long"];
+            double serverLat = espResponseData["lt"];
+            double serverLong = espResponseData["lg"];
             unsigned long distanceKmToAllowedLocation = (unsigned long)TinyGPSPlus::distanceBetween(userLatitude, userLongitude, serverLat, serverLong) / 1000;
             if (distanceKmToAllowedLocation < geo_radius) {
               gpsPass = true;
@@ -138,7 +112,7 @@ void loop() {
      }
      //do RFID validation
      if (cardReadSuccessful) {
-        long AuthorizedCardNumber = espResponseData["rfid"];
+        long AuthorizedCardNumber = espResponseData["r"];
         long CardNumber = 0;
         for (uint8_t i=0; i < uidLength; i++) 
         {
@@ -148,7 +122,6 @@ void loop() {
           CardNumber *= mult;
           CardNumber = CardNumber + long(uid[i]);
         }
-
         if (CardNumber == AuthorizedCardNumber) {
           rfidPass = true;
         } else {
@@ -157,11 +130,10 @@ void loop() {
      } else {
       rfidPass = false;
      }
-     
      //emergency duration validation 
-     int emergency_allow = espResponseData["emergency_allow"];
-     long emergency_duration = espResponseData["emergency_duration"];
-     String emergency_duration_unit = espResponseData["emergency_duration_unit"];
+     int emergency_allow = espResponseData["ea"];
+     long emergency_duration = espResponseData["ed"];
+     String emergency_duration_unit = espResponseData["edu"];
      long emergencyDurationMilli = convertEmergencyDurationTomilliSeconds(emergency_duration, emergency_duration_unit);
      if (emergencyAllowIsActive) {
         //check for last emergency allow initation
@@ -201,7 +173,6 @@ void loop() {
         }
         
      }
-
      //compare all and on!
      if (gpsPass && emergencyAllowPass && rfidPass) {
        digitalWrite(LED_BUILTIN, HIGH); 
