@@ -44,7 +44,6 @@ void setup() {
   nfc.setPassiveActivationRetries(0x9);
   // configure board to read RFID tags
   nfc.SAMConfig();
-  Serial.println("Waiting for an ISO14443A card");
 }
 void loop() {
   DynamicJsonDocument doc(300);
@@ -84,12 +83,12 @@ void loop() {
     uint8_t uid[] = { 0, 0, 0, 0, 0, 0, 0 };  // Buffer to store the returned UID
     uint8_t uidLength;        // Length of the UID (4 or 7 bytes depending on ISO14443A card type)
     cardReadSuccessful = nfc.readPassiveTargetID(PN532_MIFARE_ISO14443A, &uid[0], &uidLength);
-    delay(1000);
+    delay(500);
     /**
      * Compare data to determine if access to gun should be grated
      */
      //GPS validation
-     long geo_radius = espResponseData["gr"];
+     double geo_radius = espResponseData["gr"];
      if (geo_radius == 0) { //perform GPS analysis disregarding location
       gpsPass = true;
      } else { //perform analysis including location
@@ -97,7 +96,7 @@ void loop() {
           if (espDataIsAvailable) {//ensure server sent a message or else close up gun
             double serverLat = espResponseData["lt"];
             double serverLong = espResponseData["lg"];
-            unsigned long distanceKmToAllowedLocation = (unsigned long)TinyGPSPlus::distanceBetween(userLatitude, userLongitude, serverLat, serverLong) / 1000;
+            double distanceKmToAllowedLocation = (double)TinyGPSPlus::distanceBetween(userLatitude, userLongitude, serverLat, serverLong) / 1000;
             if (distanceKmToAllowedLocation < geo_radius) {
               gpsPass = true;
             } else {
@@ -138,14 +137,11 @@ void loop() {
      if (emergencyAllowIsActive) {
         //check for last emergency allow initation
         //if now > last emergency initiation then set emegencyAllowPass to false 
-        if((millis()- lastEmergencyAllowInitiation) > emergencyDurationMilli) {
-          //reset all
-          lastEmergencyAllowInitiation = 0;
-          emergencyAllowPass = false;
-          emergencyAllowIsActive = false;
+        if((millis()- lastEmergencyAllowInitiation + 500) > emergencyDurationMilli) { // the 500 is added because of internal delay from system component
+          //disable
+          disableEmergencyAllow();
         } else {
-          emergencyAllowPass = true;
-          emergencyAllowIsActive = true;
+          enableEmergencyAllow();
         }
      } else {
         if (espDataIsAvailable) {//ensure server sent a message or else close up gun
@@ -154,24 +150,16 @@ void loop() {
             if (buttonState == HIGH) {
               lastEmergencyAllowInitiation = millis();//initalize to start counting
               emergencyAllowsUsed++;
-              emergencyAllowIsActive = true;
-              emergencyAllowPass = true;
+              enableEmergencyAllow();
             } else {
-              emergencyAllowPass = false;
-              emergencyAllowIsActive = false;
-              lastEmergencyAllowInitiation = 0;
+              disableEmergencyAllow();
             }
           } else {
-            emergencyAllowPass = false;
-            emergencyAllowIsActive = false;
-            lastEmergencyAllowInitiation = 0;
+            disableEmergencyAllow();
           }
         } else {
-          emergencyAllowPass = false;
-          emergencyAllowIsActive = false;
-          lastEmergencyAllowInitiation = 0;
+          disableEmergencyAllow();
         }
-        
      }
      //compare all and on!
      if (gpsPass && emergencyAllowPass && rfidPass) {
@@ -182,7 +170,15 @@ void loop() {
       triggerLock.write(closePosition); 
      }
 }
-
+void enableEmergencyAllow() {
+  emergencyAllowPass = true;
+  emergencyAllowIsActive = true;
+}
+void disableEmergencyAllow() {
+  emergencyAllowPass = false;
+  emergencyAllowIsActive = false;
+  lastEmergencyAllowInitiation = 0;
+}
 long convertEmergencyDurationTomilliSeconds(long duration, String unit) {
   if (unit == "hour") {
     return duration * 60 * 60 * 1000;
