@@ -12,6 +12,9 @@ Servo triggerLock;
 TinyGPSPlus gps;
 const int emergencyButton = 4;
 const int servoPin = 5;
+const int redLED = 10;
+const int blueLED = 11;
+const int greenLED = 12;
 const int openPosition = 90;
 const int closePosition = 0;
 //#define PN532_IRQ   (6)
@@ -36,6 +39,10 @@ void setup() {
   pinMode(emergencyButton, INPUT);
   triggerLock.attach(servoPin);
   pinMode(LED_BUILTIN, OUTPUT);
+  pinMode(redLED, OUTPUT);
+  pinMode(blueLED, OUTPUT);
+  pinMode(greenLED, OUTPUT);
+  //display 
   //rfid
   nfc.begin();
   // Set the max number of retry attempts to read from a card
@@ -161,13 +168,30 @@ void loop() {
           disableEmergencyAllow();
         }
      }
+     
      //compare all and on!
      if (gpsPass && emergencyAllowPass && rfidPass) {
        digitalWrite(LED_BUILTIN, HIGH); 
        triggerLock.write(openPosition); 
+       //on green off others
+       digitalWrite(greenLED, HIGH); 
+       digitalWrite(redLED, LOW); 
+       digitalWrite(blueLED, LOW); 
      } else {
       digitalWrite(LED_BUILTIN, LOW); 
       triggerLock.write(closePosition); 
+      //on yellow if all that is left is RFID
+       if (gpsPass && emergencyAllowPass) {
+          digitalWrite(greenLED, LOW); 
+          digitalWrite(redLED, LOW); 
+          digitalWrite(blueLED, HIGH); 
+       } else {
+        //on red off others
+         digitalWrite(greenLED, LOW); 
+         digitalWrite(redLED, HIGH); 
+         digitalWrite(blueLED, LOW); 
+       }
+      
      }
 }
 void enableEmergencyAllow() {
