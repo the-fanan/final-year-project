@@ -3,7 +3,7 @@
 *                  *
 *                  *
 *RX GPI0 GPI2 GND  *
-*                  *   ESP can only connect to 2.4GHz networks
+*                  *   ESP can only connect to 2.4GHz networks. I cannot connect to Ad-Hoc hotspots.
 *                  *
 *VCC RST CHPD TX   *
 *                  *
@@ -42,3 +42,6 @@ pn532 nfc
 - SCL to A5
 - RST D7
 - IRQ D6
+------------------------------------------------------------------------------
+Test2 is for reading from theESP8266
+PrjHttpCLient is for programmming ESP module
